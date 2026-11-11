@@ -34,7 +34,7 @@ import java.io.ByteArrayInputStream;
 import java.util.Locale;
 
 /**
- * YouTube Blocker v1.1 - reconstruido desde el APK v1.0.
+ * Tube Lite v1.1 - reconstruido desde el APK v1.0.
  * Mejoras v1.1 (solo salto de anuncios): MutationObserver para saltar
  * casi al instante (mas intervalo de respaldo), cierre de banners
  * overlay y silencio durante anuncios. Resto identico a v1.0.

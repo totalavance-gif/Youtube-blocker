@@ -88,7 +88,7 @@ public class PlaybackService extends Service {
 
     private void setupMediaSession() {
         try {
-            mediaSession = new MediaSession(this, "YouTubeBlocker");
+            mediaSession = new MediaSession(this, "TubeLite");
             mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
                     | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
             mediaSession.setCallback(new MediaSession.Callback() {
