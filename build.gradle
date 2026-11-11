@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application' version '8.5.2'
+}
+
+// AGP 8 exige el namespace aqui; AIDE lo necesita en el manifest.
+// Copia filtrada solo para Gradle (AIDE usa el original intacto).
+def rawManifest = file("AndroidManifest.xml")
+def filteredManifest = file("$buildDir/filtered/AndroidManifest.xml")
+filteredManifest.parentFile.mkdirs()
+filteredManifest.text = rawManifest.text.replaceFirst(
+        /\s*package="[^"]*"/, "")
+
+android {
+    namespace 'com.nexos.youtubeblocker'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.nexos.youtubeblocker'
+        minSdk 19
+        targetSdk 28
+        versionCode 2
+        versionName '1.1'
+    }
+
+    // Misma estructura Eclipse ADT que usa AIDE, mas stubs solo-Gradle.
+    sourceSets {
+        main {
+            manifest.srcFile filteredManifest
+            java.srcDirs = ['src', 'gradle-stubs']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

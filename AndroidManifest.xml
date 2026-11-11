@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.nexos.youtubeblocker"
+    android:versionCode="2"
+    android:versionName="1.1">
+    <uses-sdk
+        android:minSdkVersion="19"
+        android:targetSdkVersion="28" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <application
+        android:theme="@style/AppTheme"
+        android:label="YouTube Blocker"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false">
+        <service
+            android:name=".PlaybackService"
+            android:exported="false" />
+        <receiver
+            android:name=".MediaActionReceiver"
+            android:exported="false" />
+        <activity
+            android:label="YouTube Blocker"
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="unspecified"
+            android:configChanges="screenSize|orientation|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
