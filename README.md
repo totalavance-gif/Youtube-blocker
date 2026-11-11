@@ -1,10 +1,14 @@
-# YouTubeBlocker v1.1
+# Tube Lite
 
 Cliente YouTube en WebView con auto-salto de anuncios (16x + clic),
 velocidades 1–2x, segundo plano (servicio + notificación + wake lock)
 y estadísticas locales. Java 7, minSdk 19, sin AndroidX.
 
 Fuente reconstruido desde el APK v1.0 + mejoras al salto de anuncios.
+
+## Novedades v1.2.1
+
+- Renombrado a Tube Lite (mismo paquete: actualiza sin perder datos).
 
 ## Novedades v1.1 (salto de anuncios)
 

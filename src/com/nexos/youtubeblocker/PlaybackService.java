@@ -27,7 +27,7 @@ public class PlaybackService extends Service {
     private static final String CHANNEL_ID = "ytb_playback";
     private static final int NOTIFICATION_ID = 4107;
     private static PlaybackService instance;
-    private String mediaTitle = "YouTube Blocker";
+    private String mediaTitle = "Tube Lite";
     private boolean playing = false;
     private MediaSession mediaSession;
     private PowerManager.WakeLock wakeLock;
@@ -47,7 +47,7 @@ public class PlaybackService extends Service {
             if (powerManager != null) {
                 wakeLock = powerManager.newWakeLock(
                         PowerManager.PARTIAL_WAKE_LOCK,
-                        "YouTubeBlocker:Playback");
+                        "TubeLite:Playback");
             }
         } catch (Exception e) {
             wakeLock = null;

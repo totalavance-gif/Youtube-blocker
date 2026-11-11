@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
         bar.addView(reload, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         TextView title = new TextView(this);
-        title.setText("YouTube Blocker");
+        title.setText("Tube Lite");
         title.setTextColor(Color.WHITE);
         title.setTextSize(17);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

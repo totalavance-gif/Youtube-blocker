@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-    <name>YouTubeBlocker</name>
+    <name>Tube Lite</name>
     <comment>YouTube Blocker v1.1: WebView con auto-salto de anuncios y segundo plano.</comment>
     <projects></projects>
     <buildSpec><buildCommand><name>com.android.ide.eclipse.adt.ResourceManagerBuilder</name><arguments></arguments></buildCommand><buildCommand><name>com.android.ide.eclipse.adt.PreCompilerBuilder</name><arguments></arguments></buildCommand><buildCommand><name>org.eclipse.jdt.core.javabuilder</name><arguments></arguments></buildCommand><buildCommand><name>com.android.ide.eclipse.adt.ApkBuilder</name><arguments></arguments></buildCommand></buildSpec>
