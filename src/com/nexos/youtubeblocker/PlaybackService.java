@@ -8,6 +8,9 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.media.MediaMetadata;
+import android.media.session.MediaSession;
+import android.media.session.PlaybackState;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -26,6 +29,7 @@ public class PlaybackService extends Service {
     private static PlaybackService instance;
     private String mediaTitle = "YouTube Blocker";
     private boolean playing = false;
+    private MediaSession mediaSession;
     private PowerManager.WakeLock wakeLock;
 
     @Override
@@ -34,6 +38,9 @@ public class PlaybackService extends Service {
         super.onCreate();
         instance = this;
         createChannel();
+        if (Build.VERSION.SDK_INT >= 21) {
+            setupMediaSession();
+        }
         try {
             PowerManager powerManager =
                     (PowerManager) getSystemService(POWER_SERVICE);
@@ -64,14 +71,75 @@ public class PlaybackService extends Service {
         PlaybackService service = instance;
         if (service == null) {
             try {
-                context.startService(
-                        new Intent(context, PlaybackService.class));
+                Intent restart =
+                        new Intent(context, PlaybackService.class);
+                if (Build.VERSION.SDK_INT >= 26) {
+                    context.startForegroundService(restart);
+                } else {
+                    context.startService(restart);
+                }
             } catch (Exception e) {
                 return;
             }
             return;
         }
         service.setPlayback(playing, title);
+    }
+
+    private void setupMediaSession() {
+        try {
+            mediaSession = new MediaSession(this, "YouTubeBlocker");
+            mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
+                    | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+            mediaSession.setCallback(new MediaSession.Callback() {
+                @Override
+                public void onPlay() {
+                    if (!playing) {
+                        MainActivity.performMediaAction("toggle");
+                    }
+                }
+
+                @Override
+                public void onPause() {
+                    if (playing) {
+                        MainActivity.performMediaAction("toggle");
+                    }
+                }
+
+                @Override
+                public void onSkipToNext() {
+                    MainActivity.performMediaAction("next");
+                }
+
+                @Override
+                public void onSkipToPrevious() {
+                    MainActivity.performMediaAction("previous");
+                }
+            });
+            mediaSession.setActive(true);
+        } catch (Exception e) {
+            mediaSession = null;
+        }
+    }
+
+    private void updateMediaSession() {
+        if (Build.VERSION.SDK_INT < 21 || mediaSession == null) {
+            return;
+        }
+        try {
+            PlaybackState.Builder state = new PlaybackState.Builder();
+            state.setActions(PlaybackState.ACTION_PLAY
+                    | PlaybackState.ACTION_PAUSE
+                    | PlaybackState.ACTION_SKIP_TO_NEXT
+                    | PlaybackState.ACTION_SKIP_TO_PREVIOUS);
+            state.setState(playing ? PlaybackState.STATE_PLAYING
+                    : PlaybackState.STATE_PAUSED, 0L, 1.0f);
+            mediaSession.setPlaybackState(state.build());
+            MediaMetadata.Builder meta = new MediaMetadata.Builder();
+            meta.putString(MediaMetadata.METADATA_KEY_TITLE, mediaTitle);
+            mediaSession.setMetadata(meta.build());
+        } catch (Exception e) {
+        }
     }
 
     private void setPlayback(boolean playing, String title) {
@@ -89,6 +157,7 @@ public class PlaybackService extends Service {
             }
         } catch (Exception e) {
         }
+        updateMediaSession();
         NotificationManager manager = (NotificationManager)
                 getSystemService(NOTIFICATION_SERVICE);
         if (manager != null) {
@@ -153,6 +222,14 @@ public class PlaybackService extends Service {
                         actionIntent(ACTION_PLAY_PAUSE, 3))
                 .addAction(android.R.drawable.ic_media_next, "Siguiente",
                         actionIntent(ACTION_NEXT, 4));
+        if (Build.VERSION.SDK_INT >= 21 && mediaSession != null) {
+            try {
+                builder.setStyle(new Notification.MediaStyle()
+                        .setMediaSession(mediaSession.getSessionToken())
+                        .setShowActionsInCompactView(0, 1, 2));
+            } catch (Exception e) {
+            }
+        }
         if (Build.VERSION.SDK_INT >= 21) {
             builder.setVisibility(Notification.VISIBILITY_PUBLIC);
         }
@@ -170,6 +247,14 @@ public class PlaybackService extends Service {
     @Override
     public void onDestroy() {
         instance = null;
+        try {
+            if (mediaSession != null) {
+                mediaSession.setActive(false);
+                mediaSession.release();
+                mediaSession = null;
+            }
+        } catch (Exception e) {
+        }
         try {
             if (wakeLock != null && wakeLock.isHeld()) {
                 wakeLock.release();

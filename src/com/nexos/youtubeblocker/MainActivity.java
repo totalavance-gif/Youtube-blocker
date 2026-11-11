@@ -3,6 +3,7 @@ package com.nexos.youtubeblocker;
 import adrt.ADRTLogCatReader;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.PictureInPictureParams;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -11,17 +12,26 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.io.ByteArrayInputStream;
+import java.util.Locale;
 
 /**
  * YouTube Blocker v1.1 - reconstruido desde el APK v1.0.
@@ -31,7 +41,6 @@ import android.widget.Toast;
  */
 public class MainActivity extends Activity {
     private static final String HOME = "https://www.youtube.com/";
-    private static final double[] SPEEDS = {1.0d, 1.25d, 1.5d, 1.75d, 2.0d};
     private static MainActivity activeActivity;
     private SharedPreferences prefs;
     private Button speedButton;
@@ -42,6 +51,16 @@ public class MainActivity extends Activity {
     private double playbackSpeed = 1.0d;
     private int adsDetected = 0;
     private int adsSkipped = 0;
+    private int blockedCount = 0;
+    private Handler sleepHandler;
+    private Runnable sleepTask;
+    private LinearLayout toolbarLayout;
+    private ProgressBar progressBar;
+    private FrameLayout fullscreenContainer;
+    private View customView;
+    private WebChromeClient webChromeClient;
+    private WebChromeClient.CustomViewCallback customViewCallback;
+    private boolean lastPlaying;
 
     @Override
     public void onCreate(Bundle bundle) {
@@ -129,19 +148,150 @@ public class MainActivity extends Activity {
             }
         });
         bar.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(42)));
+        toolbarLayout = bar;
         root.addView(bar, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(50)));
 
-        statusView = null;
+        progressBar = new ProgressBar(this, null,
+                android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setVisibility(View.GONE);
+        root.addView(progressBar, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(4)));
+        statusView = new TextView(this);
+        statusView.setTextColor(Color.LTGRAY);
+        statusView.setTextSize(11);
+        statusView.setSingleLine(true);
+        statusView.setPadding(dp(10), dp(4), dp(10), dp(4));
+        statusView.setBackgroundColor(Color.rgb(40, 40, 40));
+        root.addView(statusView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
         webView = new BackgroundMediaWebView(this);
         root.addView(webView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
-        setContentView(root);
+        FrameLayout decor = new FrameLayout(this);
+        decor.addView(root, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        fullscreenContainer = new FrameLayout(this);
+        fullscreenContainer.setVisibility(View.GONE);
+        fullscreenContainer.setBackgroundColor(Color.BLACK);
+        decor.addView(fullscreenContainer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(decor);
         updateStatus();
     }
 
+    private void showSpeedDialog() {
+        final String[] labels = {"0.5x", "0.75x", "1.0x", "1.25x",
+                "1.5x", "1.75x", "2.0x", "2.5x", "3.0x", "Otra…"};
+        new AlertDialog.Builder(this).setTitle("Velocidad")
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        if (which == labels.length - 1) {
+                            showCustomSpeedDialog();
+                            return;
+                        }
+                        setPlaybackSpeed(Double.parseDouble(labels[which]
+                                .substring(0, labels[which].length() - 1)));
+                    }
+                }).show();
+    }
+
+    private void showCustomSpeedDialog() {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER
+                | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        input.setText(String.valueOf(playbackSpeed));
+        new AlertDialog.Builder(this).setTitle("Velocidad personalizada")
+                .setMessage("Entre 0.5 y 3.0")
+                .setView(input)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Aplicar",
+                        new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        try {
+                            double value = Double.parseDouble(input.getText()
+                                    .toString().trim().replace(',', '.'));
+                            if (!isValidSpeed(value)) {
+                                Toast.makeText(MainActivity.this,
+                                        "Fuera de rango (0.5–3.0)",
+                                        Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                            setPlaybackSpeed(value);
+                        } catch (NumberFormatException e) {
+                            Toast.makeText(MainActivity.this,
+                                    "Número inválido",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }).show();
+    }
+
+    private void setPlaybackSpeed(double speed) {
+        playbackSpeed = speed;
+        prefs.edit().putLong("speed_bits",
+                Double.doubleToLongBits(playbackSpeed)).apply();
+        if (webView != null) {
+            applyPlaybackSpeed(webView);
+        }
+        updateStatus();
+        Toast.makeText(this, "Velocidad: " + playbackSpeed + "x",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    private void showSleepDialog() {
+        final String[] labels = {"Apagado", "15 minutos", "30 minutos",
+                "60 minutos", "90 minutos"};
+        final int[] minutes = {0, 15, 30, 60, 90};
+        new AlertDialog.Builder(this).setTitle("Apagado automático")
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        scheduleSleep(minutes[which]);
+                    }
+                }).show();
+    }
+
+    private void scheduleSleep(int minutes) {
+        if (sleepHandler == null) {
+            sleepHandler = new Handler();
+        }
+        if (sleepTask != null) {
+            sleepHandler.removeCallbacks(sleepTask);
+            sleepTask = null;
+        }
+        if (minutes <= 0) {
+            Toast.makeText(this, "Apagado automático desactivado",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final WebView target = webView;
+        sleepTask = new Runnable() {
+            @Override
+            public void run() {
+                if (target != null) {
+                    target.evaluateJavascript(
+                            "(function(){var v=document.querySelector("
+                            + "'video');if(v)v.pause();})();", null);
+                }
+                Toast.makeText(MainActivity.this,
+                        "Apagado automático: pausa", Toast.LENGTH_SHORT).show();
+                sleepTask = null;
+            }
+        };
+        sleepHandler.postDelayed(sleepTask, minutes * 60L * 1000L);
+        Toast.makeText(this, "Apagado en " + minutes + " minutos",
+                Toast.LENGTH_SHORT).show();
+    }
+
     private void showToolsMenu() {
-        String[] items = new String[6];
+        String[] items = new String[7];
         items[0] = blockerEnabled
                 ? "Bloqueador automático: ACTIVADO"
                 : "Bloqueador automático: DESACTIVADO";
@@ -151,6 +301,7 @@ public class MainActivity extends Activity {
         items[3] = "Diagnóstico de segundo plano";
         items[4] = "Limpiar caché de la página";
         items[5] = "Restablecer preferencias";
+        items[6] = "Apagado automático";
         new AlertDialog.Builder(this).setTitle("Herramientas")
                 .setItems(items, new DialogInterface.OnClickListener() {
             @Override
@@ -170,22 +321,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 if (which == 1) {
-                    int current = 0;
-                    for (int i = 0; i < SPEEDS.length; i++) {
-                        if (Math.abs(SPEEDS[i] - playbackSpeed) < 0.01d) {
-                            current = i;
-                        }
-                    }
-                    playbackSpeed = SPEEDS[(current + 1) % SPEEDS.length];
-                    prefs.edit().putLong("speed_bits",
-                            Double.doubleToLongBits(playbackSpeed)).apply();
-                    if (webView != null) {
-                        applyPlaybackSpeed(webView);
-                    }
-                    updateStatus();
-                    Toast.makeText(MainActivity.this,
-                            "Velocidad: " + playbackSpeed + "x",
-                            Toast.LENGTH_SHORT).show();
+                    showSpeedDialog();
                     return;
                 }
                 if (which == 2) {
@@ -242,6 +378,8 @@ public class MainActivity extends Activity {
                                             Toast.LENGTH_SHORT).show();
                                 }
                             }).show();
+                } else if (which == 6) {
+                    showSleepDialog();
                 }
             }
         }).show();
@@ -279,7 +417,83 @@ public class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         webView.setBackgroundColor(Color.BLACK);
         webView.addJavascriptInterface(new PlaybackBridge(), "YTBBridge");
+        webChromeClient = new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView view, int progress) {
+                if (progressBar == null) {
+                    return;
+                }
+                if (progress < 100) {
+                    progressBar.setVisibility(View.VISIBLE);
+                    progressBar.setProgress(progress);
+                } else {
+                    progressBar.setProgress(100);
+                    progressBar.setVisibility(View.GONE);
+                }
+            }
+
+            @Override
+            public void onShowCustomView(View view,
+                    WebChromeClient.CustomViewCallback callback) {
+                if (customView != null) {
+                    callback.onCustomViewHidden();
+                    return;
+                }
+                customView = view;
+                customViewCallback = callback;
+                toolbarLayout.setVisibility(View.GONE);
+                webView.setVisibility(View.GONE);
+                fullscreenContainer.setVisibility(View.VISIBLE);
+                fullscreenContainer.addView(view,
+                        new FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT));
+                setRequestedOrientation(android.content.pm.ActivityInfo
+                        .SCREEN_ORIENTATION_LANDSCAPE);
+            }
+
+            @Override
+            public void onHideCustomView() {
+                if (customView == null) {
+                    return;
+                }
+                fullscreenContainer.removeView(customView);
+                customView = null;
+                fullscreenContainer.setVisibility(View.GONE);
+                toolbarLayout.setVisibility(View.VISIBLE);
+                webView.setVisibility(View.VISIBLE);
+                setRequestedOrientation(android.content.pm.ActivityInfo
+                        .SCREEN_ORIENTATION_UNSPECIFIED);
+                if (customViewCallback != null) {
+                    customViewCallback.onCustomViewHidden();
+                    customViewCallback = null;
+                }
+            }
+        };
+        webView.setWebChromeClient(webChromeClient);
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view,
+                    String url) {
+                if (blockerEnabled && shouldBlock(url)) {
+                    recordBlocked(url);
+                    return emptyResponse();
+                }
+                return super.shouldInterceptRequest(view, url);
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view,
+                    WebResourceRequest request) {
+                String url = request == null || request.getUrl() == null
+                        ? "" : request.getUrl().toString();
+                if (blockerEnabled && shouldBlock(url)) {
+                    recordBlocked(url);
+                    return emptyResponse();
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
@@ -289,26 +503,87 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url == null || !(url.startsWith("https://")
-                        || url.startsWith("http://"))) {
+                if (url == null) {
                     return false;
                 }
-                view.loadUrl(url);
+                if (url.startsWith("https://") || url.startsWith("http://")) {
+                    return false;
+                }
+                openExternal(url);
                 return true;
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view,
                     WebResourceRequest request) {
-                if (request != null && request.getUrl() != null) {
-                    String url = request.getUrl().toString();
-                    if (url.startsWith("https://")
-                            || url.startsWith("http://")) {
-                        view.loadUrl(url);
-                        return true;
-                    }
+                if (request == null || request.getUrl() == null
+                        || !request.isForMainFrame()) {
+                    return false;
                 }
-                return false;
+                String url = request.getUrl().toString();
+                if (url.startsWith("https://") || url.startsWith("http://")) {
+                    return false;
+                }
+                openExternal(url);
+                return true;
+            }
+        });
+    }
+
+    private void openExternal(String url) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW,
+                    android.net.Uri.parse(url));
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "No se puede abrir el enlace",
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private boolean shouldBlock(String rawUrl) {
+        if (rawUrl == null || rawUrl.length() == 0) {
+            return false;
+        }
+        String url = rawUrl.toLowerCase(Locale.US);
+        if (url.contains("googleads.g.doubleclick.net/pagead/id")) {
+            return true;
+        }
+        if (url.contains("static.doubleclick.net/instream/ad_status.js")) {
+            return true;
+        }
+        if (url.contains("youtube.com/pagead/adview")) {
+            return true;
+        }
+        if (url.contains("youtube.com/pagead/interaction/")) {
+            return true;
+        }
+        if (url.contains("youtube.com/pagead/1p-user-list/")) {
+            return true;
+        }
+        if (url.contains("google.com/pagead/1p-user-list/")) {
+            return true;
+        }
+        if (url.contains("youtube.com/pcs/activeview")) {
+            return true;
+        }
+        if (url.contains("google.com/pagead/aclk")) {
+            return true;
+        }
+        return false;
+    }
+
+    private WebResourceResponse emptyResponse() {
+        return new WebResourceResponse("text/plain", "UTF-8",
+                new ByteArrayInputStream(new byte[0]));
+    }
+
+    private void recordBlocked(String url) {
+        blockedCount++;
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateStatus();
             }
         });
     }
@@ -355,6 +630,8 @@ public class MainActivity extends Activity {
                 + "try{window.__ytbAdVideo.muted=!!window.__ytbAdOldMuted;}catch(e){}}"
                 + "window.__ytbAdWasActive=false;window.__ytbAdVideo=null;window.__ytbAdCounted=false;}"
                 + "try{"
+                + "if(!ad&&v&&v!==window.__ytbLastVideo){window.__ytbLastVideo=v;"
+                + "try{v.playbackRate=window.__ytbUserRate||1;}catch(e){}}"
                 + "var csels=['.ytp-ad-overlay-close-button','.ytp-ad-overlay-close-container button'];"
                 + "for(var k=0;k<csels.length;k++){"
                 + "var list=document.querySelectorAll(csels[k]);"
@@ -390,18 +667,20 @@ public class MainActivity extends Activity {
                 + "if(v&&!v.ended){try{var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(e){}}}};"
                 + "document.addEventListener('visibilitychange',window.__ytbVisibilityHandler,false);"
                 + "}catch(e){}})();";
-        webView.loadUrl("javascript:" + script);
+        webView.evaluateJavascript(script, null);
     }
 
     private void applyPlaybackSpeed(WebView webView) {
-        if (webView != null) {
-            webView.loadUrl("javascript:(function(){"
-                    + "var v=document.querySelector('#movie_player video')"
-                    + "||document.querySelector('video');"
-                    + "if(v&&!document.querySelector('#movie_player.ad-showing')){"
-                    + "try{v.playbackRate=" + playbackSpeed + ";}catch(e){}}"
-                    + "window.__ytbUserRate=" + playbackSpeed + ";})();");
+        if (webView == null) {
+            return;
         }
+        String script = "(function(){"
+                + "var v=document.querySelector('#movie_player video')"
+                + "||document.querySelector('video');"
+                + "if(v&&!document.querySelector('#movie_player.ad-showing')){"
+                + "try{v.playbackRate=" + playbackSpeed + ";}catch(e){}}"
+                + "window.__ytbUserRate=" + playbackSpeed + ";})();";
+        webView.evaluateJavascript(script, null);
     }
 
     private String speedLabel() {
@@ -425,7 +704,8 @@ public class MainActivity extends Activity {
                     + " · Velocidad " + playbackSpeed
                     + "x · Anuncios detectados: " + adsDetected
                     + " · Saltados: " + adsSkipped
-                    + " · Controles de fondo en notificación");
+                    + " · Controles de fondo en notificación"
+                    + " · Bloqueadas: " + blockedCount);
         }
     }
 
@@ -437,6 +717,7 @@ public class MainActivity extends Activity {
     public class PlaybackBridge {
         @JavascriptInterface
         public void playbackState(boolean playing, String title) {
+            lastPlaying = playing;
             PlaybackService.updatePlayback(MainActivity.this, playing, title);
         }
 
@@ -494,13 +775,17 @@ public class MainActivity extends Activity {
                             + "||document.querySelector('video');"
                             + "if(v)v.currentTime=0;}})();";
                 }
-                activity.webView.loadUrl("javascript:" + script);
+                activity.webView.evaluateJavascript(script, null);
             }
         });
     }
 
     @Override
     public void onBackPressed() {
+        if (customView != null && webChromeClient != null) {
+            webChromeClient.onHideCustomView();
+            return;
+        }
         if (webView == null || !webView.canGoBack()) {
             moveTaskToBack(true);
         } else {
@@ -526,6 +811,10 @@ public class MainActivity extends Activity {
         if (activeActivity == this) {
             activeActivity = null;
         }
+        if (sleepHandler != null && sleepTask != null) {
+            sleepHandler.removeCallbacks(sleepTask);
+            sleepTask = null;
+        }
         if (webView != null) {
             webView.stopLoading();
             webView.setWebViewClient(null);
@@ -534,5 +823,35 @@ public class MainActivity extends Activity {
             webView = null;
         }
         super.onDestroy();
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (lastPlaying && customView == null
+                && Build.VERSION.SDK_INT >= 26) {
+            try {
+                enterPictureInPictureMode(
+                        new PictureInPictureParams.Builder().build());
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(
+            boolean isInPictureInPictureMode) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode);
+        if (toolbarLayout != null) {
+            toolbarLayout.setVisibility(isInPictureInPictureMode
+                    ? View.GONE : View.VISIBLE);
+        }
+        if (statusView != null) {
+            statusView.setVisibility(isInPictureInPictureMode
+                    ? View.GONE : View.VISIBLE);
+        }
+        if (progressBar != null) {
+            progressBar.setVisibility(View.GONE);
+        }
     }
 }

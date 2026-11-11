@@ -31,3 +31,27 @@ Fuente reconstruido desde el APK v1.0 + mejoras al salto de anuncios.
 Video con anuncio saltable (salta solo), bumper no saltable
 (pasa volando y mudo), banner overlay (se cierra solo), video normal
 (velocidad intacta) y segundo plano con pantalla apagada.
+
+## Novedades v1.2
+
+- Pantalla completa con giro a horizontal + barra de progreso.
+- Bloqueo de red (hosts solo-anuncios) con contador en la barra de estado.
+- MediaSession: controles del sistema y botones de audífonos.
+- PiP automático al salir con video en curso (Android 8+).
+- Velocidades a la carta (0.5–3.0) y apagado automático (15–90 min).
+- Barra de estado visible, links externos, `evaluateJavascript`.
+- Icono propio y release firmable por variables (`versionCode 3`).
+- La velocidad se reaplica al cambiar de video.
+- Se mantiene `targetSdk 28` a propósito: subirlo exigiría ajustes
+  que romperían la compilación en AIDE sin beneficio instalando directo.
+
+## Release firmada (manual)
+
+```sh
+keytool -genkeypair -keystore ytb.jks -alias ytb -keyalg RSA \
+  -keysize 2048 -validity 10000
+KEYSTORE_FILE=$PWD/ytb.jks KEYSTORE_PASSWORD=... KEY_ALIAS=ytb \
+  KEY_PASSWORD=... ./gradlew assembleRelease
+```
+Guarda el `ytb.jks` y las claves fuera del repo. Cambiar de firma
+obliga a desinstalar la app antes de instalar la nueva.
