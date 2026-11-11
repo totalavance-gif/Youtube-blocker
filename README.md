@@ -10,6 +10,12 @@ Fuente reconstruido desde el APK v1.0 + mejoras al salto de anuncios.
 
 - Renombrado a Tube Lite (mismo paquete: actualiza sin perder datos).
 
+## Novedades v1.3
+
+- Amplificador de volumen +15% con interruptor (menú Herramientas).
+  Usa `LoudnessEnhancer` del sistema (~120 mB); si el equipo no lo
+  soporta, se desactiva solo con aviso. Solo actúa al reproducir.
+
 ## Novedades v1.1 (salto de anuncios)
 
 - `MutationObserver` con freno de 150 ms: salta casi al instante de

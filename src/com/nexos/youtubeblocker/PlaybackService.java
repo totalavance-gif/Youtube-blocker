@@ -8,12 +8,14 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.media.audiofx.LoudnessEnhancer;
 import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.widget.Toast;
 
 public class PlaybackService extends Service {
     public static final String ACTION_NEXT =
@@ -26,11 +28,17 @@ public class PlaybackService extends Service {
             "com.nexos.youtubeblocker.PREVIOUS";
     private static final String CHANNEL_ID = "ytb_playback";
     private static final int NOTIFICATION_ID = 4107;
+    // +15% de amplitud ~= +1.2 dB ~= 120 mB (100 mB = 1 dB).
+    // Ajustar de oido si se quiere mas o menos efecto.
+    private static final int AMPLIFIER_GAIN_MB = 120;
     private static PlaybackService instance;
     private String mediaTitle = "Tube Lite";
     private boolean playing = false;
     private MediaSession mediaSession;
     private PowerManager.WakeLock wakeLock;
+    private LoudnessEnhancer loudness;
+    private boolean ampWanted;
+    private boolean ampUnsupported;
 
     @Override
     public void onCreate() {
@@ -38,6 +46,8 @@ public class PlaybackService extends Service {
         super.onCreate();
         instance = this;
         createChannel();
+        ampWanted = getSharedPreferences("ytb_settings", MODE_PRIVATE)
+                .getBoolean("amp_enabled", false);
         if (Build.VERSION.SDK_INT >= 21) {
             setupMediaSession();
         }
@@ -142,6 +152,80 @@ public class PlaybackService extends Service {
         }
     }
 
+    public static void setAmplifier(Context context, boolean on) {
+        PlaybackService service = instance;
+        if (service == null) {
+            try {
+                Intent restart = new Intent(context, PlaybackService.class);
+                if (Build.VERSION.SDK_INT >= 26) {
+                    context.startForegroundService(restart);
+                } else {
+                    context.startService(restart);
+                }
+            } catch (Exception e) {
+                return;
+            }
+            return;
+        }
+        service.ampWanted = on;
+        service.applyAmplifier();
+    }
+
+    private boolean ensureAmplifier() {
+        if (loudness != null) {
+            return true;
+        }
+        try {
+            loudness = new LoudnessEnhancer(0);
+            loudness.setTargetGain(AMPLIFIER_GAIN_MB);
+            return true;
+        } catch (Exception e) {
+            releaseAmplifier();
+            return false;
+        }
+    }
+
+    private void applyAmplifier() {
+        if (ampUnsupported) {
+            return;
+        }
+        boolean want = ampWanted && playing;
+        try {
+            if (want) {
+                if (!ensureAmplifier()) {
+                    throw new IllegalStateException("sin efecto");
+                }
+                loudness.setEnabled(true);
+            } else if (loudness != null) {
+                loudness.setEnabled(false);
+            }
+        } catch (Exception e) {
+            releaseAmplifier();
+            ampUnsupported = true;
+            ampWanted = false;
+            getSharedPreferences("ytb_settings", MODE_PRIVATE).edit()
+                    .putBoolean("amp_enabled", false).apply();
+            Toast.makeText(this,
+                    "Amplificador no compatible con este equipo",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void releaseAmplifier() {
+        if (loudness == null) {
+            return;
+        }
+        try {
+            loudness.setEnabled(false);
+        } catch (Exception e) {
+        }
+        try {
+            loudness.release();
+        } catch (Exception e) {
+        }
+        loudness = null;
+    }
+
     private void setPlayback(boolean playing, String title) {
         this.playing = playing;
         if (title != null && title.trim().length() > 0) {
@@ -158,6 +242,7 @@ public class PlaybackService extends Service {
         } catch (Exception e) {
         }
         updateMediaSession();
+        applyAmplifier();
         NotificationManager manager = (NotificationManager)
                 getSystemService(NOTIFICATION_SERVICE);
         if (manager != null) {
@@ -247,6 +332,7 @@ public class PlaybackService extends Service {
     @Override
     public void onDestroy() {
         instance = null;
+        releaseAmplifier();
         try {
             if (mediaSession != null) {
                 mediaSession.setActive(false);

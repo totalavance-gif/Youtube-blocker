@@ -245,6 +245,15 @@ public class MainActivity extends Activity {
                 Toast.LENGTH_SHORT).show();
     }
 
+    private void toggleAmplifier() {
+        boolean on = !prefs.getBoolean("amp_enabled", false);
+        prefs.edit().putBoolean("amp_enabled", on).apply();
+        PlaybackService.setAmplifier(this, on);
+        updateStatus();
+        Toast.makeText(this, on ? "Amplificador +15% activado"
+                : "Amplificador desactivado", Toast.LENGTH_SHORT).show();
+    }
+
     private void showSleepDialog() {
         final String[] labels = {"Apagado", "15 minutos", "30 minutos",
                 "60 minutos", "90 minutos"};
@@ -291,7 +300,7 @@ public class MainActivity extends Activity {
     }
 
     private void showToolsMenu() {
-        String[] items = new String[7];
+        String[] items = new String[8];
         items[0] = blockerEnabled
                 ? "Bloqueador automático: ACTIVADO"
                 : "Bloqueador automático: DESACTIVADO";
@@ -302,6 +311,9 @@ public class MainActivity extends Activity {
         items[4] = "Limpiar caché de la página";
         items[5] = "Restablecer preferencias";
         items[6] = "Apagado automático";
+        items[7] = prefs.getBoolean("amp_enabled", false)
+                ? "Amplificador +15%: ACTIVADO"
+                : "Amplificador +15%: DESACTIVADO";
         new AlertDialog.Builder(this).setTitle("Herramientas")
                 .setItems(items, new DialogInterface.OnClickListener() {
             @Override
@@ -380,6 +392,8 @@ public class MainActivity extends Activity {
                             }).show();
                 } else if (which == 6) {
                     showSleepDialog();
+                } else if (which == 7) {
+                    toggleAmplifier();
                 }
             }
         }).show();
@@ -705,7 +719,9 @@ public class MainActivity extends Activity {
                     + "x · Anuncios detectados: " + adsDetected
                     + " · Saltados: " + adsSkipped
                     + " · Controles de fondo en notificación"
-                    + " · Bloqueadas: " + blockedCount);
+                    + " · Bloqueadas: " + blockedCount
+                    + " · Amp: " + (prefs.getBoolean("amp_enabled", false)
+                            ? "ON" : "OFF"));
         }
     }
 
