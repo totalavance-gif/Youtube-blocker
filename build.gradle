@@ -18,8 +18,8 @@ android {
         applicationId 'com.nexos.youtubeblocker'
         minSdk 19
         targetSdk 28
-        versionCode 5
-        versionName '1.3'
+        versionCode 6
+        versionName '1.4'
     }
 
     // Misma estructura Eclipse ADT que usa AIDE, mas stubs solo-Gradle.

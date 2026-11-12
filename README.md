@@ -6,6 +6,14 @@ y estadísticas locales. Java 7, minSdk 19, sin AndroidX.
 
 Fuente reconstruido desde el APK v1.0 + mejoras al salto de anuncios.
 
+## Novedades v1.4
+
+- Sin PiP: se eliminó el modo imagen-en-imagen automático.
+- Barra de estado con el título del video en curso (una línea).
+- Progreso de carga rojo y botones/toolbar con elevación (Android 5+).
+- Salto más insistente: reintenta el clic cada pasada, baja al botón
+  dentro del slot, busca en todo el documento y suma portugués (`Pular`).
+
 ## Novedades v1.2.1
 
 - Renombrado a Tube Lite (mismo paquete: actualiza sin perder datos).

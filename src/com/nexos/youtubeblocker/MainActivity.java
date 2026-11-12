@@ -3,7 +3,6 @@ package com.nexos.youtubeblocker;
 import adrt.ADRTLogCatReader;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.PictureInPictureParams;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -60,7 +59,7 @@ public class MainActivity extends Activity {
     private View customView;
     private WebChromeClient webChromeClient;
     private WebChromeClient.CustomViewCallback customViewCallback;
-    private boolean lastPlaying;
+    private String lastTitle = "";
 
     @Override
     public void onCreate(Bundle bundle) {
@@ -105,6 +104,12 @@ public class MainActivity extends Activity {
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(4), dp(4), dp(4), dp(4));
         bar.setBackgroundColor(Color.rgb(32, 32, 32));
+        if (Build.VERSION.SDK_INT >= 21) {
+            try {
+                bar.setElevation(dp(4));
+            } catch (Exception e) {
+            }
+        }
 
         Button back = makeButton("‹");
         back.setContentDescription("Atrás");
@@ -155,6 +160,13 @@ public class MainActivity extends Activity {
         progressBar = new ProgressBar(this, null,
                 android.R.attr.progressBarStyleHorizontal);
         progressBar.setMax(100);
+        if (Build.VERSION.SDK_INT >= 21) {
+            try {
+                progressBar.getProgressDrawable().setColorFilter(
+                        0xFFFF0000, android.graphics.PorterDuff.Mode.SRC_IN);
+            } catch (Exception e) {
+            }
+        }
         progressBar.setVisibility(View.GONE);
         root.addView(progressBar, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(4)));
@@ -163,7 +175,9 @@ public class MainActivity extends Activity {
         statusView.setTextSize(11);
         statusView.setSingleLine(true);
         statusView.setPadding(dp(10), dp(4), dp(10), dp(4));
-        statusView.setBackgroundColor(Color.rgb(40, 40, 40));
+        statusView.setBackgroundColor(Color.rgb(27, 27, 27));
+        statusView.setSingleLine(true);
+        statusView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         root.addView(statusView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -415,6 +429,10 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 21) {
             button.setBackgroundTintList(ColorStateList.valueOf(
                     Color.rgb(55, 55, 55)));
+            try {
+                button.setElevation(dp(2));
+            } catch (Exception e) {
+            }
         }
         return button;
     }
@@ -610,7 +628,7 @@ public class MainActivity extends Activity {
                 + "if(window.__ytbSkipTimer){clearInterval(window.__ytbSkipTimer);}"
                 + "if(window.__ytbObserver){try{window.__ytbObserver.disconnect();}catch(e){}window.__ytbObserver=null;}"
                 + "window.__ytbAdWasActive=false;window.__ytbAdVideo=null;window.__ytbAdOldRate=1;"
-                + "window.__ytbAdOldMuted=false;window.__ytbAdCounted=false;"
+                + "window.__ytbAdOldMuted=false;window.__ytbAdCounted=false;window.__ytbSkipReported=false;"
                 + "window.__ytbLastCheck=0;"
                 + "window.__ytbAutoEnabled="
                 + (blockerEnabled ? "true" : "false") + ";"
@@ -623,26 +641,31 @@ public class MainActivity extends Activity {
                 + "if(ad&&v){"
                 + "if(!window.__ytbAdWasActive||window.__ytbAdVideo!==v){"
                 + "window.__ytbAdVideo=v;window.__ytbAdOldRate=v.playbackRate||window.__ytbUserRate||1;"
-                + "window.__ytbAdOldMuted=!!v.muted;window.__ytbAdCounted=false;}"
+                + "window.__ytbAdOldMuted=!!v.muted;window.__ytbAdCounted=false;window.__ytbSkipReported=false;}"
                 + "window.__ytbAdWasActive=true;"
                 + "if(window.__ytbAutoEnabled){try{v.playbackRate=16;}catch(e){}try{v.muted=true;}catch(e){}}"
                 + "if(!window.__ytbAdCounted){window.__ytbAdCounted=true;if(window.YTBBridge)YTBBridge.adDetected();}"
                 + "var sels=['.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-skip-ad-button','.ytp-ad-skip-button-slot','.ytp-ad-skip-button-container button'];"
                 + "var b=null;"
-                + "for(var i=0;i<sels.length&&!b;i++){var e=document.querySelector(sels[i]);if(e)b=e;}"
+                + "for(var i=0;i<sels.length&&!b;i++){var e=document.querySelector(sels[i]);"
+                + "if(e){var inner=null;try{inner=e.querySelector('button');}catch(x){}b=inner||e;}}"
                 + "if(!b){var a=p?p.querySelectorAll('button,[role=button]'):[];"
                 + "for(var j=0;j<a.length;j++){"
                 + "var t=((a[j].innerText||'')+' '+(a[j].getAttribute('aria-label')||'')).toLowerCase();"
-                + "if(t.indexOf('saltar')>=0||t.indexOf('omitir')>=0||t.indexOf('skip ad')>=0||t==='skip'){b=a[j];break;}}}"
-                + "if(window.__ytbAutoEnabled&&b&&!b.__ytbClicked){"
+                + "if(t.indexOf('saltar')>=0||t.indexOf('omitir')>=0||t.indexOf('pular')>=0||t.indexOf('skip ad')>=0||t==='skip'){b=a[j];break;}}}"
+                + "if(!b){try{var d=document.querySelectorAll('button');"
+                + "for(var k=0;k<d.length&&k<300;k++){"
+                + "var t2=((d[k].innerText||'')+' '+(d[k].getAttribute('aria-label')||'')).toLowerCase();"
+                + "if(t2.indexOf('saltar')>=0||t2.indexOf('omitir')>=0||t2.indexOf('pular')>=0||t2.indexOf('skip ad')>=0||t2==='skip'){b=d[k];break;}}}catch(x){}}"
+                + "if(window.__ytbAutoEnabled&&b){"
                 + "var r=b.getBoundingClientRect(),s=getComputedStyle(b);"
                 + "if(r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!b.disabled){"
-                + "b.__ytbClicked=true;b.click();if(window.YTBBridge)YTBBridge.adSkipped();}}"
+                + "b.click();if(!window.__ytbSkipReported){window.__ytbSkipReported=true;if(window.YTBBridge)YTBBridge.adSkipped();}}}"
                 + "}else if(window.__ytbAdWasActive){"
                 + "if(window.__ytbAdVideo){"
                 + "try{window.__ytbAdVideo.playbackRate=window.__ytbUserRate||window.__ytbAdOldRate||1;}catch(e){}"
                 + "try{window.__ytbAdVideo.muted=!!window.__ytbAdOldMuted;}catch(e){}}"
-                + "window.__ytbAdWasActive=false;window.__ytbAdVideo=null;window.__ytbAdCounted=false;}"
+                + "window.__ytbAdWasActive=false;window.__ytbAdVideo=null;window.__ytbAdCounted=false;window.__ytbSkipReported=false;}"
                 + "try{"
                 + "if(!ad&&v&&v!==window.__ytbLastVideo){window.__ytbLastVideo=v;"
                 + "try{v.playbackRate=window.__ytbUserRate||1;}catch(e){}}"
@@ -650,10 +673,10 @@ public class MainActivity extends Activity {
                 + "for(var k=0;k<csels.length;k++){"
                 + "var list=document.querySelectorAll(csels[k]);"
                 + "for(var m=0;m<list.length&&m<5;m++){var c=list[m];"
-                + "if(window.__ytbAutoEnabled&&c&&!c.__ytbClicked){"
+                + "if(window.__ytbAutoEnabled&&c){"
                 + "var cr=c.getBoundingClientRect(),cs=getComputedStyle(c);"
                 + "if(cr.width>0&&cr.height>0&&cs.display!=='none'&&cs.visibility!=='hidden'&&!c.disabled){"
-                + "c.__ytbClicked=true;try{c.click();}catch(e){}}}}}"
+                + "try{c.click();}catch(e){}}}}}"
                 + "}catch(e){}"
                 + "var vid=document.querySelector('#movie_player video')||document.querySelector('video');"
                 + "if(vid){"
@@ -705,6 +728,17 @@ public class MainActivity extends Activity {
         return speed >= 0.5d && speed <= 3.0d;
     }
 
+    private String nowPlayingSuffix() {
+        if (lastTitle == null || lastTitle.length() == 0) {
+            return "";
+        }
+        String t = lastTitle.trim();
+        if (t.length() > 40) {
+            t = t.substring(0, 40) + "…";
+        }
+        return " · " + t;
+    }
+
     private void updateStatus() {
         if (toggleButton != null) {
             toggleButton.setText(blockerEnabled ? "Auto: ON" : "Auto: OFF");
@@ -721,7 +755,8 @@ public class MainActivity extends Activity {
                     + " · Controles de fondo en notificación"
                     + " · Bloqueadas: " + blockedCount
                     + " · Amp: " + (prefs.getBoolean("amp_enabled", false)
-                            ? "ON" : "OFF"));
+                            ? "ON" : "OFF")
+                    + nowPlayingSuffix());
         }
     }
 
@@ -733,8 +768,14 @@ public class MainActivity extends Activity {
     public class PlaybackBridge {
         @JavascriptInterface
         public void playbackState(boolean playing, String title) {
-            lastPlaying = playing;
+            lastTitle = title == null ? "" : title;
             PlaybackService.updatePlayback(MainActivity.this, playing, title);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    updateStatus();
+                }
+            });
         }
 
         @JavascriptInterface
@@ -841,33 +882,4 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    @Override
-    protected void onUserLeaveHint() {
-        super.onUserLeaveHint();
-        if (lastPlaying && customView == null
-                && Build.VERSION.SDK_INT >= 26) {
-            try {
-                enterPictureInPictureMode(
-                        new PictureInPictureParams.Builder().build());
-            } catch (Exception e) {
-            }
-        }
-    }
-
-    @Override
-    public void onPictureInPictureModeChanged(
-            boolean isInPictureInPictureMode) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode);
-        if (toolbarLayout != null) {
-            toolbarLayout.setVisibility(isInPictureInPictureMode
-                    ? View.GONE : View.VISIBLE);
-        }
-        if (statusView != null) {
-            statusView.setVisibility(isInPictureInPictureMode
-                    ? View.GONE : View.VISIBLE);
-        }
-        if (progressBar != null) {
-            progressBar.setVisibility(View.GONE);
-        }
-    }
 }
