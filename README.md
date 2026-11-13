@@ -6,6 +6,12 @@ y estadísticas locales. Java 7, minSdk 19, sin AndroidX.
 
 Fuente reconstruido desde el APK v1.0 + mejoras al salto de anuncios.
 
+## Novedades v1.5
+
+- Anti-pausa por inactividad: confirma solo el diálogo
+  "¿Seguir viendo?" (ES/EN/PT) y reanuda el video.
+- La pausa manual se respeta: sin diálogo, no toca nada.
+
 ## Novedades v1.4
 
 - Sin PiP: se eliminó el modo imagen-en-imagen automático.
